@@ -1,0 +1,6 @@
+keras>=3.10
+jax[cpu]
+hgq2
+h5py
+numpy
+pytest
