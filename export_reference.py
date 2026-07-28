@@ -51,7 +51,7 @@ def main():
     ap.add_argument('--beta', type=float, default=0.0,
                     help='must match the beta the checkpoint was trained with '
                          '(EBOP tracking adds variables to the weight file)')
-    ap.add_argument('--preset', choices=['init24', 'w6p12'], default='init24',
+    ap.add_argument('--preset', choices=['init24', 'w6p12', 'w6p12f'], default='init24',
                     help='must match training (w6p12 adds the pmu quantizer, '
                          'which changes the variable set)')
     ap.add_argument('--out', default='model/contract')

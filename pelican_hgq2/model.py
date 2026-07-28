@@ -43,6 +43,9 @@ class HGQ2Config:
     overflow_mode: str = 'SAT'        # matches firmware AP_SAT
     het_weights: bool = True          # per-element weight bitwidths
     pmu_bits: Optional[KIF] = None    # None = float momenta into the dots
+    freeze_pmu: bool = False          # pin pmu bits (no MACs -> no EBOP pressure,
+                                      # so trainable pmu bits only ever grow)
+    freeze_input: bool = False        # pin the d_ij grid likewise
     input_bits: KIF = (True, 11, 12)
     post_agg_2to2_bits: KIF = (True, 3, 20)
     act_bits: KIF = (False, 3, 21)
@@ -54,7 +57,8 @@ class HGQ2Config:
     f_bound: int = 26                 # learnable-fractional-bits constraint
 
 
-def _quantizer_config(qcfg: HGQ2Config, kif: KIF, place: str, het: bool):
+def _quantizer_config(qcfg: HGQ2Config, kif: KIF, place: str, het: bool,
+                      frozen: bool = False):
     from hgq.config import QuantizerConfig
     from hgq.constraints import MinMax
 
@@ -64,6 +68,7 @@ def _quantizer_config(qcfg: HGQ2Config, kif: KIF, place: str, het: bool):
         round_mode=qcfg.round_mode, overflow_mode=qcfg.overflow_mode,
         ic=MinMax(-qcfg.i_bound, qcfg.i_bound),
         fc=MinMax(-qcfg.f_bound, qcfg.f_bound),
+        trainable=not frozen,
     )
     if het:
         kwargs['homogeneous_axis'] = ()      # every element gets its own bits
@@ -103,10 +108,14 @@ class PelicanNanoHGQ(keras.Model):
             q = qcfg
             act = lambda kif: _quantizer_config(q, kif, 'datalane', het=False)
             wgt = lambda kif: _quantizer_config(q, kif, 'weight', het=q.het_weights)
+            frz = lambda kif, frozen: _quantizer_config(
+                q, kif, 'datalane', het=False, frozen=frozen)
             with LayerConfigScope(enable_ebops=q.beta > 0, beta0=q.beta):
                 if q.pmu_bits is not None:
-                    self.pmu_quant = Quantizer(act(q.pmu_bits), name='pmu_quant')
-                self.input_quant = Quantizer(act(q.input_bits), name='input_quant')
+                    self.pmu_quant = Quantizer(
+                        frz(q.pmu_bits, q.freeze_pmu), name='pmu_quant')
+                self.input_quant = Quantizer(
+                    frz(q.input_bits, q.freeze_input), name='input_quant')
                 self.mixing_2to2 = QDense(
                     n_hidden, use_bias=False, kernel_initializer=init22,
                     iq_conf=act(q.post_agg_2to2_bits), kq_conf=wgt(q.w_2to2_bits),
@@ -172,13 +181,21 @@ def preset_config(preset: str, beta: float = 0.0,
                 on the firmware input_t = ap_fixed<12,10> grid). Integer parts
                 follow the converged beta=3e-7 ranges with ~6-bit budgets; the
                 bits are trainable, so only the neighborhood matters.
+    'w6p12f'  — w6p12 with the boundary grids FROZEN (pmu at <12,10>, d_ij at
+                its 6-bit grid). Standalone quantizers feed no MACs, so EBOP
+                never pushes back on them and trainable boundary bits only ever
+                grow (both w6p12 runs ballooned pmu to <22,12>); the hand flow
+                proved these boundaries sufficient at AUC 0.9519, so pin them
+                and let HGQ2 optimize the interior only.
     """
     if preset == 'init24':
         return HGQ2Config(beta=beta, het_weights=het_weights)
-    if preset == 'w6p12':
+    if preset in ('w6p12', 'w6p12f'):
+        frozen = preset == 'w6p12f'
         return HGQ2Config(
             beta=beta, het_weights=het_weights,
             pmu_bits=(True, 9, 2),            # ap_fixed<12,10>
+            freeze_pmu=frozen, freeze_input=frozen,
             input_bits=(True, 8, -3),
             post_agg_2to2_bits=(True, -4, 9),
             act_bits=(False, -2, 8),

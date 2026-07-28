@@ -43,7 +43,7 @@ def parse_args():
                    help='float baseline, no quantizers')
     p.add_argument('--beta', type=float, default=0.0,
                    help='EBOP resource-regularization strength (0 = off)')
-    p.add_argument('--preset', choices=['init24', 'w6p12'], default='init24',
+    p.add_argument('--preset', choices=['init24', 'w6p12', 'w6p12f'], default='init24',
                    help='bitwidth starting point: Brevitas-24bit grids, or the '
                         'hand-tuned w6a6i6p12 operating point (adds the pmu '
                         'quantizer)')
