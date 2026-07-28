@@ -16,7 +16,7 @@ os.environ.setdefault('KERAS_BACKEND', 'jax')
 import keras
 import numpy as np
 
-from pelican_hgq2 import HGQ2Config, build_model
+from pelican_hgq2 import build_model, preset_config
 from pelican_hgq2.data import load_split
 
 
@@ -43,6 +43,10 @@ def parse_args():
                    help='float baseline, no quantizers')
     p.add_argument('--beta', type=float, default=0.0,
                    help='EBOP resource-regularization strength (0 = off)')
+    p.add_argument('--preset', choices=['init24', 'w6p12'], default='init24',
+                   help='bitwidth starting point: Brevitas-24bit grids, or the '
+                        'hand-tuned w6a6i6p12 operating point (adds the pmu '
+                        'quantizer)')
     p.add_argument('--no-het-weights', dest='het_weights', action='store_false',
                    help='per-tensor instead of per-element weight bitwidths')
     p.add_argument('--out', default='model/hgq2_nano.weights.h5')
@@ -63,7 +67,8 @@ def main():
 
     qcfg = None
     if args.quant:
-        qcfg = HGQ2Config(beta=args.beta, het_weights=args.het_weights)
+        qcfg = preset_config(args.preset, beta=args.beta,
+                             het_weights=args.het_weights)
     model = build_model(n_hidden=args.n_hidden, nmax=train_x.shape[1],
                         nave=args.nave, drop_rate=args.drop_rate, qcfg=qcfg)
     model.compile(

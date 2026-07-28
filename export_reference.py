@@ -21,7 +21,7 @@ os.environ.setdefault('KERAS_BACKEND', 'jax')
 
 import numpy as np
 
-from pelican_hgq2 import HGQ2Config, build_model
+from pelican_hgq2 import build_model, preset_config
 
 
 def kif_of(quantizer_layer):
@@ -51,11 +51,14 @@ def main():
     ap.add_argument('--beta', type=float, default=0.0,
                     help='must match the beta the checkpoint was trained with '
                          '(EBOP tracking adds variables to the weight file)')
+    ap.add_argument('--preset', choices=['init24', 'w6p12'], default='init24',
+                    help='must match training (w6p12 adds the pmu quantizer, '
+                         'which changes the variable set)')
     ap.add_argument('--out', default='model/contract')
     args = ap.parse_args()
 
     model = build_model(n_hidden=args.n_hidden, nmax=args.nmax,
-                        qcfg=HGQ2Config(beta=args.beta))
+                        qcfg=preset_config(args.preset, beta=args.beta))
     model.load_weights(args.weights)
 
     points = {

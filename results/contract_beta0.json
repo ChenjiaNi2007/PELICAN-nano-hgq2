@@ -1,0 +1,85 @@
+{
+  "input": {
+    "k": 1,
+    "i": 8,
+    "f": 10,
+    "bits": 19,
+    "shape": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "ap_fixed": "ap_fixed<19,9>"
+  },
+  "post_agg_2to2": {
+    "k": 1,
+    "i": 3,
+    "f": 19,
+    "bits": 23,
+    "shape": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "ap_fixed": "ap_fixed<23,4>"
+  },
+  "w_2to2": {
+    "k": 1,
+    "i": 1,
+    "f": 20,
+    "bits": 22,
+    "shape": [
+      6,
+      2
+    ],
+    "ap_fixed": "ap_fixed<22,2>"
+  },
+  "act": {
+    "k": 0,
+    "i": 1,
+    "f": 18,
+    "bits": 19,
+    "shape": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "ap_fixed": "ap_ufixed<19,1>"
+  },
+  "post_agg_2to0": {
+    "k": 1,
+    "i": 1,
+    "f": 20,
+    "bits": 22,
+    "shape": [
+      1,
+      1
+    ],
+    "ap_fixed": "ap_fixed<22,2>"
+  },
+  "w_2to0": {
+    "k": 1,
+    "i": 3,
+    "f": 17,
+    "bits": 21,
+    "shape": [
+      4,
+      1
+    ],
+    "ap_fixed": "ap_fixed<21,4>"
+  },
+  "output": {
+    "k": 1,
+    "i": 2,
+    "f": 17,
+    "bits": 20,
+    "shape": [
+      1,
+      1
+    ],
+    "ap_fixed": "ap_fixed<20,3>"
+  }
+}
