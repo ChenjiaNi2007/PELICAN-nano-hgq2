@@ -83,6 +83,13 @@ def main():
             save_best_only=True, save_weights_only=True)],
     )
 
+    # Best-val-AUC checkpoint alone hides the converged bitwidth state when the
+    # EBOP term degrades AUC over training (the beta=1e-6 epoch-1 artifact) —
+    # always keep the final-epoch weights too.
+    stem = args.out[:-len('.weights.h5')] if args.out.endswith('.weights.h5') \
+        else os.path.splitext(args.out)[0]
+    model.save_weights(stem + '.final.weights.h5')
+
     best = float(np.max(hist.history.get('val_auc', [0.0])))
     print(f'best val AUC: {best:.4f}')
     with open(os.path.splitext(args.out)[0] + '.history.json', 'w') as f:
