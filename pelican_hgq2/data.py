@@ -17,19 +17,22 @@ def load_split(path, scale=1.0, add_beams=True, beam_mass=0.0, nmax=None,
     """Returns (pmu [B, 2+N, 4] float32, labels [B] float32).
 
     `limit` takes a seeded RANDOM subsample — the toptag h5 files are sorted by
-    label, so a head slice would be single-class (AUC undefined)."""
+    label, so a head slice would be single-class (AUC undefined).
+
+    `nmax` caps constituents to the leading nmax (toptag files are pT-sorted, so
+    this is the leading-pT cap; firmware NPARTICLES=20). The cap is applied
+    inside the h5 read so 200-wide files never load fully into memory."""
+    csl = slice(None) if nmax is None else slice(None, nmax)
     with h5py.File(path, 'r') as f:
         n = f['Pmu'].shape[0]
         if limit is not None and limit < n:
             idx = np.sort(np.random.default_rng(seed).choice(n, limit,
                                                              replace=False))
-            pmu = f['Pmu'][idx].astype('float32')
+            pmu = f['Pmu'][idx, csl].astype('float32')
             y = f['is_signal'][idx].astype('float32')
         else:
-            pmu = f['Pmu'][:].astype('float32')
+            pmu = f['Pmu'][:, csl].astype('float32')
             y = f['is_signal'][:].astype('float32')
-    if nmax is not None:
-        pmu = pmu[:, :nmax]
     pmu = pmu * np.float32(scale)
     if add_beams:
         p = 1.0

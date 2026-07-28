@@ -34,6 +34,9 @@ def parse_args():
     p.add_argument('--lr', type=float, default=1e-3)
     p.add_argument('--drop-rate', type=float, default=0.05)
     p.add_argument('--scale', type=float, default=1.0)
+    p.add_argument('--nmax', type=int, default=20,
+                   help='leading-pT constituent cap before beams (firmware '
+                        'NPARTICLES=20); wider h5 files are truncated on read')
     p.add_argument('--limit', type=int, default=None,
                    help='cap events per split (smoke tests)')
     p.add_argument('--float', dest='quant', action='store_false',
@@ -52,9 +55,11 @@ def main():
     keras.utils.set_random_seed(args.seed)
 
     train_x, train_y = load_split(os.path.join(args.data_dir, 'train.h5'),
-                                  scale=args.scale, limit=args.limit)
+                                  scale=args.scale, nmax=args.nmax,
+                                  limit=args.limit)
     valid_x, valid_y = load_split(os.path.join(args.data_dir, 'valid.h5'),
-                                  scale=args.scale, limit=args.limit)
+                                  scale=args.scale, nmax=args.nmax,
+                                  limit=args.limit)
 
     qcfg = None
     if args.quant:
