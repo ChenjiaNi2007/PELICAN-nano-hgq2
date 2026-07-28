@@ -162,6 +162,34 @@ class PelicanNanoHGQ(keras.Model):
         return w
 
 
+def preset_config(preset: str, beta: float = 0.0,
+                  het_weights: bool = True) -> HGQ2Config:
+    """Named starting points for the bitwidth optimization.
+
+    'init24'  — the Brevitas 24-bit checkpoint grids (original defaults).
+    'w6p12'   — warm start at the hand-tuned resource optimum
+                (fpga_model_qat_w6a6i6p12: 6-bit weights/acts/dots, 12-bit pmu
+                on the firmware input_t = ap_fixed<12,10> grid). Integer parts
+                follow the converged beta=3e-7 ranges with ~6-bit budgets; the
+                bits are trainable, so only the neighborhood matters.
+    """
+    if preset == 'init24':
+        return HGQ2Config(beta=beta, het_weights=het_weights)
+    if preset == 'w6p12':
+        return HGQ2Config(
+            beta=beta, het_weights=het_weights,
+            pmu_bits=(True, 9, 2),            # ap_fixed<12,10>
+            input_bits=(True, 8, -3),
+            post_agg_2to2_bits=(True, -4, 9),
+            act_bits=(False, -2, 8),
+            post_agg_2to0_bits=(True, 0, 5),
+            output_bits=(True, 2, 3),
+            w_2to2_bits=(True, 0, 5),
+            w_2to0_bits=(True, 2, 3),
+        )
+    raise ValueError(f'unknown preset {preset!r}')
+
+
 def build_model(n_hidden=2, nmax=22, nave=49.0, drop_rate=0.05,
                 qcfg: Optional[HGQ2Config] = None) -> PelicanNanoHGQ:
     model = PelicanNanoHGQ(n_hidden=n_hidden, nave=nave, drop_rate=drop_rate,
