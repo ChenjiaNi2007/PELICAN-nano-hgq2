@@ -46,6 +46,10 @@ class HGQ2Config:
     freeze_pmu: bool = False          # pin pmu bits (no MACs -> no EBOP pressure,
                                       # so trainable pmu bits only ever grow)
     freeze_input: bool = False        # pin the d_ij grid likewise
+    cap_bits: bool = False            # upper-bound every i/f at its init value:
+                                      # bits may only shrink from the start point
+    bit_penalty: float = 0.0          # MonoL1 on every i/f; 0 = keep hgq's
+                                      # default 1e-8 (negligible in practice)
     input_bits: KIF = (True, 11, 12)
     post_agg_2to2_bits: KIF = (True, 3, 20)
     act_bits: KIF = (False, 3, 21)
@@ -61,15 +65,32 @@ def _quantizer_config(qcfg: HGQ2Config, kif: KIF, place: str, het: bool,
                       frozen: bool = False):
     from hgq.config import QuantizerConfig
     from hgq.constraints import MinMax
+    from hgq.regularizers import MonoL1
 
     k0, i0, f0 = kif
+    # cap_bits pins the *upper* bound at the starting budget; the lower bound
+    # stays wide open, so a capped run can only ever cost less than its preset.
+    i_hi = float(i0) if qcfg.cap_bits else float(qcfg.i_bound)
+    f_hi = float(f0) if qcfg.cap_bits else float(qcfg.f_bound)
     kwargs = dict(
         q_type='kif', place=place, k0=bool(k0), i0=float(i0), f0=float(f0),
         round_mode=qcfg.round_mode, overflow_mode=qcfg.overflow_mode,
-        ic=MinMax(-qcfg.i_bound, qcfg.i_bound),
-        fc=MinMax(-qcfg.f_bound, qcfg.f_bound),
+        ic=MinMax(-qcfg.i_bound, i_hi),
+        fc=MinMax(-qcfg.f_bound, f_hi),
         trainable=not frozen,
     )
+    if qcfg.bit_penalty > 0.0 and not frozen:
+        # hgq puts a MonoL1(1e-8) on every i/f by default — signed sum, so it
+        # pushes bits down without the |i| sign flip a plain L1 would have.
+        # It is the ONLY resource gradient the standalone quantizer lanes
+        # (pmu, d_ij, ReLU out, logit) ever see, since EBOP counts only
+        # multiplications inside Q-layers, and at 1e-8 it is ~4 orders of
+        # magnitude too weak to hold them down: both w6p12 runs let pmu drift
+        # from <12,10> to <22,12> against no opposition. Raising it is what
+        # gives those lanes a real cost.
+        pen = MonoL1(qcfg.bit_penalty)
+        kwargs['ir'] = pen
+        kwargs['fr'] = pen
     if het:
         kwargs['homogeneous_axis'] = ()      # every element gets its own bits
     else:
@@ -171,8 +192,8 @@ class PelicanNanoHGQ(keras.Model):
         return w
 
 
-def preset_config(preset: str, beta: float = 0.0,
-                  het_weights: bool = True) -> HGQ2Config:
+def preset_config(preset: str, beta: float = 0.0, het_weights: bool = True,
+                  bit_penalty: float = 0.0) -> HGQ2Config:
     """Named starting points for the bitwidth optimization.
 
     'init24'  — the Brevitas 24-bit checkpoint grids (original defaults).
@@ -187,13 +208,21 @@ def preset_config(preset: str, beta: float = 0.0,
                 grow (both w6p12 runs ballooned pmu to <22,12>); the hand flow
                 proved these boundaries sufficient at AUC 0.9519, so pin them
                 and let HGQ2 optimize the interior only.
+    'w6p12c'  — w6p12 CAPPED: every lane starts at the hand-tuned budget and may
+                only shrink (i/f upper-bounded at their init). Guarantees the
+                result costs no more than the hand model on any lane, and shows
+                where the model gives bits back. Pair with --bit-penalty, since
+                with EBOP alone only the four Q-layer lanes feel any pressure
+                and the rest just sit at the cap.
     """
     if preset == 'init24':
-        return HGQ2Config(beta=beta, het_weights=het_weights)
-    if preset in ('w6p12', 'w6p12f'):
+        return HGQ2Config(beta=beta, het_weights=het_weights,
+                          bit_penalty=bit_penalty)
+    if preset in ('w6p12', 'w6p12f', 'w6p12c'):
         frozen = preset == 'w6p12f'
         return HGQ2Config(
-            beta=beta, het_weights=het_weights,
+            beta=beta, het_weights=het_weights, bit_penalty=bit_penalty,
+            cap_bits=preset == 'w6p12c',
             pmu_bits=(True, 9, 2),            # ap_fixed<12,10>
             freeze_pmu=frozen, freeze_input=frozen,
             input_bits=(True, 8, -3),

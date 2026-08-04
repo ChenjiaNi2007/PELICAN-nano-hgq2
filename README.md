@@ -22,7 +22,14 @@ python3.12 -m venv .venv
 # train (quantized, EBOP resource regularization; --float for the baseline)
 python train.py --data-dir ../PELICAN-nano/data/sample_data --epochs 8 --beta 1e-6
 
-# dump the learned quantization contract (ap_fixed types + snapped weights)
+# start capped at the hand-tuned w6a6i6p12 budget (12-bit pmu, 6 elsewhere) so
+# bits can only shrink, and give every lane — including the standalone pmu/act
+# quantizers EBOP cannot see — a real per-bit cost
+python train.py --data-dir ../PELICAN-nano/data/toptag --epochs 24 \
+    --preset w6p12c --bit-penalty 3e-4
+
+# dump the learned quantization contract (ap_fixed types + snapped weights);
+# --preset/--beta must match training, they change the variable set
 python export_reference.py --weights model/hgq2_nano.weights.h5 --beta 1e-6 \
     --out model/contract
 

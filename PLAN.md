@@ -40,6 +40,14 @@ This repo therefore targets the **JAX backend** (`KERAS_BACKEND=jax`).
    mixing layers only; pmu/input bitwidths — the actual DSP lever — are NOT in
    the EBOP objective and must be swept/chosen by hand, and csynth stays the
    ground truth for resources.
+   Confirmed empirically: with β at 0 or 1e-6 the pmu/d_ij/act/output lanes carry
+   an *identical* resource loss, and both `w6p12` runs drifted pmu from `<12,10>`
+   to `<22,12>` unopposed. The only pressure those lanes ever see is hgq's
+   default `MonoL1(1e-8)` on each i/f variable — ~4 orders of magnitude too weak.
+   `--bit-penalty λ` raises that coefficient (all lanes), and the `w6p12c` preset
+   upper-bounds every i/f at the hand-tuned w6a6i6p12 budget so a run can only
+   give bits back, never spend them. λ has no EBOP-style physical units, so it
+   needs a scan; a lane printed at ≤0 bits means λ is too strong.
 4. **HGQ2's default kif constraints silently cap fractional bits at 10** — below
    the 24-bit Brevitas baseline (f up to 23). Widened to ±26 (`f_bound`) /
    ±16 (`i_bound`) in `HGQ2Config`; without this the model silently trains at

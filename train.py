@@ -16,7 +16,7 @@ os.environ.setdefault('KERAS_BACKEND', 'jax')
 import keras
 import numpy as np
 
-from pelican_hgq2 import build_model, preset_config
+from pelican_hgq2 import build_model, contract_of, format_contract, preset_config
 from pelican_hgq2.data import load_split
 
 
@@ -43,10 +43,17 @@ def parse_args():
                    help='float baseline, no quantizers')
     p.add_argument('--beta', type=float, default=0.0,
                    help='EBOP resource-regularization strength (0 = off)')
-    p.add_argument('--preset', choices=['init24', 'w6p12', 'w6p12f'], default='init24',
+    p.add_argument('--preset', choices=['init24', 'w6p12', 'w6p12f', 'w6p12c'],
+                   default='init24',
                    help='bitwidth starting point: Brevitas-24bit grids, or the '
                         'hand-tuned w6a6i6p12 operating point (adds the pmu '
-                        'quantizer)')
+                        'quantizer); f=frozen boundaries, c=capped (bits may '
+                        'only shrink below the hand budget)')
+    p.add_argument('--bit-penalty', type=float, default=0.0,
+                   help='MonoL1 lambda on every quantizer bitwidth (0 keeps '
+                        "hgq's default 1e-8). Unlike EBOP, which only counts "
+                        'multiplications inside Q-layers, this reaches the '
+                        'standalone pmu/d_ij/act/output lanes too')
     p.add_argument('--no-het-weights', dest='het_weights', action='store_false',
                    help='per-tensor instead of per-element weight bitwidths')
     p.add_argument('--out', default='model/hgq2_nano.weights.h5')
@@ -68,7 +75,8 @@ def main():
     qcfg = None
     if args.quant:
         qcfg = preset_config(args.preset, beta=args.beta,
-                             het_weights=args.het_weights)
+                             het_weights=args.het_weights,
+                             bit_penalty=args.bit_penalty)
     model = build_model(n_hidden=args.n_hidden, nmax=train_x.shape[1],
                         nave=args.nave, drop_rate=args.drop_rate, qcfg=qcfg)
     model.compile(
@@ -97,6 +105,19 @@ def main():
 
     best = float(np.max(hist.history.get('val_auc', [0.0])))
     print(f'best val AUC: {best:.4f}')
+    if qcfg is not None:
+        # Final-epoch bits, against the preset's starting budget, so the log
+        # shows which lanes actually gave bits back.
+        start = contract_of(build_model(
+            n_hidden=args.n_hidden, nmax=train_x.shape[1], nave=args.nave,
+            drop_rate=args.drop_rate, qcfg=qcfg))
+        final = contract_of(model)
+        print('final-epoch bitwidths:')
+        print(format_contract(final, ref=start))
+        dead = [n for n, c in final.items() if c['bits'] <= 0]
+        if dead:
+            print(f'WARNING: lanes collapsed to <=0 bits {dead} — --bit-penalty '
+                  'is too strong for this lr; nothing survives quantization')
     with open(os.path.splitext(args.out)[0] + '.history.json', 'w') as f:
         json.dump({k: [float(v) for v in vs] for k, vs in hist.history.items()}, f)
 

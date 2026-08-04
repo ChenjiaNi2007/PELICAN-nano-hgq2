@@ -21,16 +21,7 @@ os.environ.setdefault('KERAS_BACKEND', 'jax')
 
 import numpy as np
 
-from pelican_hgq2 import build_model, preset_config
-
-
-def kif_of(quantizer_layer):
-    """(k, i, f) numpy arrays of a hgq Quantizer (or QDense .iq/.kq)."""
-    q = quantizer_layer.quantizer
-    k = np.asarray(q.k, dtype=np.int32) if not callable(q.k) else np.asarray(q.k())
-    i = np.rint(np.asarray(q.i)).astype(np.int32)
-    f = np.rint(np.asarray(q.f)).astype(np.int32)
-    return k, i, f
+from pelican_hgq2 import build_model, contract_of, kif_of, preset_config
 
 
 def snap(w, k, i, f):
@@ -51,8 +42,10 @@ def main():
     ap.add_argument('--beta', type=float, default=0.0,
                     help='must match the beta the checkpoint was trained with '
                          '(EBOP tracking adds variables to the weight file)')
-    ap.add_argument('--preset', choices=['init24', 'w6p12', 'w6p12f'], default='init24',
-                    help='must match training (w6p12 adds the pmu quantizer, '
+    ap.add_argument('--preset',
+                    choices=['init24', 'w6p12', 'w6p12f', 'w6p12c'],
+                    default='init24',
+                    help='must match training (w6p12* adds the pmu quantizer, '
                          'which changes the variable set)')
     ap.add_argument('--out', default='model/contract')
     args = ap.parse_args()
@@ -61,28 +54,7 @@ def main():
                         qcfg=preset_config(args.preset, beta=args.beta))
     model.load_weights(args.weights)
 
-    points = {
-        'input': model.input_quant,
-        'post_agg_2to2': model.mixing_2to2.iq,
-        'w_2to2': model.mixing_2to2.kq,
-        'act': model.act_quant,
-        'post_agg_2to0': model.mixing_2to0.iq,
-        'w_2to0': model.mixing_2to0.kq,
-        'output': model.output_quant,
-    }
-    if model.pmu_quant is not None:
-        points['pmu'] = model.pmu_quant
-
-    contract = {}
-    for name, layer in points.items():
-        k, i, f = kif_of(layer)
-        contract[name] = {
-            'k': int(k.max()), 'i': int(i.max()), 'f': int(f.max()),
-            'bits': int(k.max() + i.max() + f.max()),
-            'shape': list(np.broadcast(k, i, f).shape),
-            'ap_fixed': f'ap_{"" if k.max() else "u"}fixed<{int(k.max()+i.max()+f.max())},'
-                        f'{int(k.max()+i.max())}>',
-        }
+    contract = contract_of(model)
 
     w1 = np.asarray(model.mixing_2to2.kernel)          # [6, H] (torch: [H, 6].T)
     w2 = np.asarray(model.mixing_2to0.kernel)          # [2H, 1]
