@@ -1,0 +1,97 @@
+{
+  "pmu": {
+    "k": 1,
+    "i": 9,
+    "f": 2,
+    "bits": 12,
+    "shape": [
+      1,
+      1,
+      1
+    ],
+    "ap_fixed": "ap_fixed<12,10>"
+  },
+  "input": {
+    "k": 1,
+    "i": 8,
+    "f": -4,
+    "bits": 5,
+    "shape": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "ap_fixed": "ap_fixed<5,9>"
+  },
+  "post_agg_2to2": {
+    "k": 1,
+    "i": 1,
+    "f": 2,
+    "bits": 4,
+    "shape": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "ap_fixed": "ap_fixed<4,2>"
+  },
+  "w_2to2": {
+    "k": 1,
+    "i": 0,
+    "f": 2,
+    "bits": 3,
+    "shape": [
+      6,
+      2
+    ],
+    "ap_fixed": "ap_fixed<3,1>"
+  },
+  "act": {
+    "k": 1,
+    "i": 0,
+    "f": 3,
+    "bits": 4,
+    "shape": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "ap_fixed": "ap_fixed<4,1>"
+  },
+  "post_agg_2to0": {
+    "k": 1,
+    "i": -1,
+    "f": 4,
+    "bits": 4,
+    "shape": [
+      1,
+      1
+    ],
+    "ap_fixed": "ap_fixed<4,0>"
+  },
+  "w_2to0": {
+    "k": 1,
+    "i": 2,
+    "f": 2,
+    "bits": 5,
+    "shape": [
+      4,
+      1
+    ],
+    "ap_fixed": "ap_fixed<5,3>"
+  },
+  "output": {
+    "k": 1,
+    "i": 2,
+    "f": 2,
+    "bits": 5,
+    "shape": [
+      1,
+      1
+    ],
+    "ap_fixed": "ap_fixed<5,3>"
+  }
+}
