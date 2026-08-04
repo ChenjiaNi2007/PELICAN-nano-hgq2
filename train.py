@@ -105,6 +105,21 @@ def main():
 
     best = float(np.max(hist.history.get('val_auc', [0.0])))
     print(f'best val AUC: {best:.4f}')
+
+    # The hand-tuned Brevitas numbers we compare against (0.9519 for
+    # w6a6i6p12) are TEST-set AUCs, so report test too or the comparison is
+    # apples-to-oranges. Final-epoch weights are in the model right now.
+    test_path = os.path.join(args.data_dir, 'test.h5')
+    if os.path.exists(test_path):
+        test_x, test_y = load_split(test_path, scale=args.scale,
+                                    nmax=args.nmax, limit=args.limit)
+        for tag, w in (('final', stem + '.final.weights.h5'), ('best', args.out)):
+            model.load_weights(w)
+            m = model.evaluate(test_x, test_y, batch_size=args.batch_size,
+                               verbose=0, return_dict=True)
+            print(f'test AUC ({tag} weights): {m["auc"]:.4f}')
+        model.load_weights(stem + '.final.weights.h5')  # bit table below is final
+
     if qcfg is not None:
         # Final-epoch bits, against the preset's starting budget, so the log
         # shows which lanes actually gave bits back.

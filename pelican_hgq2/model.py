@@ -197,11 +197,13 @@ def preset_config(preset: str, beta: float = 0.0, het_weights: bool = True,
     """Named starting points for the bitwidth optimization.
 
     'init24'  — the Brevitas 24-bit checkpoint grids (original defaults).
-    'w6p12'   — warm start at the hand-tuned resource optimum
-                (fpga_model_qat_w6a6i6p12: 6-bit weights/acts/dots, 12-bit pmu
-                on the firmware input_t = ap_fixed<12,10> grid). Integer parts
-                follow the converged beta=3e-7 ranges with ~6-bit budgets; the
-                bits are trainable, so only the neighborhood matters.
+    'w6p12'   — warm start at the hand-tuned resource optimum: the grids
+                fpga_model_qat_w6a6i6p12_best.pt actually learned, read off with
+                `model_loader.py --quant` (scale 2^-f per quantizer, i = B-k-f).
+                Earlier revisions guessed the integer parts from the 24-bit
+                beta=3e-7 run and were up to 5 binades too fine on post_agg_2to2
+                and act — same bit count, wrong window. Results in results/
+                predating 2026-08-04 used those wrong placements.
     'w6p12f'  — w6p12 with the boundary grids FROZEN (pmu at <12,10>, d_ij at
                 its 6-bit grid). Standalone quantizers feed no MACs, so EBOP
                 never pushes back on them and trainable boundary bits only ever
@@ -223,15 +225,18 @@ def preset_config(preset: str, beta: float = 0.0, het_weights: bool = True,
         return HGQ2Config(
             beta=beta, het_weights=het_weights, bit_penalty=bit_penalty,
             cap_bits=preset == 'w6p12c',
-            pmu_bits=(True, 9, 2),            # ap_fixed<12,10>
+            # (k, i, f) with f = -log2(learned scale); every lane is 6 bits
+            # except pmu at 12. act_layer is signed in the checkpoint despite
+            # being a ReLU output, so k=1 there too.
+            pmu_bits=(True, 9, 2),            # ap_fixed<12,10>, scale 2^-2
             freeze_pmu=frozen, freeze_input=frozen,
-            input_bits=(True, 8, -3),
-            post_agg_2to2_bits=(True, -4, 9),
-            act_bits=(False, -2, 8),
-            post_agg_2to0_bits=(True, 0, 5),
-            output_bits=(True, 2, 3),
-            w_2to2_bits=(True, 0, 5),
-            w_2to0_bits=(True, 2, 3),
+            input_bits=(True, 9, -4),         # ap_fixed<6,10>, scale 2^4
+            post_agg_2to2_bits=(True, 1, 4),  # ap_fixed<6,2>,  scale 2^-4
+            act_bits=(True, 2, 3),            # ap_fixed<6,3>,  scale 2^-3
+            post_agg_2to0_bits=(True, -1, 6),  # ap_fixed<6,0>,  scale 2^-6
+            output_bits=(True, 2, 3),         # ap_fixed<6,3>,  scale 2^-3
+            w_2to2_bits=(True, 0, 5),         # ap_fixed<6,1>,  scale 2^-5
+            w_2to0_bits=(True, 2, 3),         # ap_fixed<6,3>,  scale 2^-3
         )
     raise ValueError(f'unknown preset {preset!r}')
 
