@@ -46,6 +46,8 @@ class HGQ2Config:
     freeze_pmu: bool = False          # pin pmu bits (no MACs -> no EBOP pressure,
                                       # so trainable pmu bits only ever grow)
     freeze_input: bool = False        # pin the d_ij grid likewise
+    freeze_all: bool = False          # pin EVERY lane: pure training-recipe test
+                                      # at a fixed, known-good operating point
     cap_bits: bool = False            # upper-bound every i/f at its init value:
                                       # bits may only shrink from the start point
     bit_penalty: float = 0.0          # MonoL1 on every i/f; 0 = keep hgq's
@@ -127,10 +129,13 @@ class PelicanNanoHGQ(keras.Model):
             from hgq.layers import QDense, Quantizer
 
             q = qcfg
-            act = lambda kif: _quantizer_config(q, kif, 'datalane', het=False)
-            wgt = lambda kif: _quantizer_config(q, kif, 'weight', het=q.het_weights)
+            act = lambda kif: _quantizer_config(q, kif, 'datalane', het=False,
+                                                frozen=q.freeze_all)
+            wgt = lambda kif: _quantizer_config(q, kif, 'weight',
+                                                het=q.het_weights,
+                                                frozen=q.freeze_all)
             frz = lambda kif, frozen: _quantizer_config(
-                q, kif, 'datalane', het=False, frozen=frozen)
+                q, kif, 'datalane', het=False, frozen=frozen or q.freeze_all)
             with LayerConfigScope(enable_ebops=q.beta > 0, beta0=q.beta):
                 if q.pmu_bits is not None:
                     self.pmu_quant = Quantizer(
@@ -204,12 +209,14 @@ def preset_config(preset: str, beta: float = 0.0, het_weights: bool = True,
                 beta=3e-7 run and were up to 5 binades too fine on post_agg_2to2
                 and act — same bit count, wrong window. Results in results/
                 predating 2026-08-04 used those wrong placements.
-    'w6p12f'  — w6p12 with the boundary grids FROZEN (pmu at <12,10>, d_ij at
-                its 6-bit grid). Standalone quantizers feed no MACs, so EBOP
-                never pushes back on them and trainable boundary bits only ever
-                grow (both w6p12 runs ballooned pmu to <22,12>); the hand flow
-                proved these boundaries sufficient at AUC 0.9519, so pin them
-                and let HGQ2 optimize the interior only.
+    'w6p12f'  — w6p12 with EVERY lane frozen at the checkpoint's grid: no
+                bitwidth search at all, so it isolates the Keras/JAX training
+                recipe against the Brevitas one at a known-good operating point
+                (test AUC 0.9519). The w6p12c runs never hold their budget —
+                bits only ever erode under the caps, and the λ=0 run decayed
+                from test 0.9484 at epoch 10 to 0.928 by epoch 24 as the d_ij
+                integer range shrank <6,10> -> <4,8>. Freezing removes that
+                confound: whatever this run reaches is the recipe's ceiling.
     'w6p12c'  — w6p12 CAPPED: every lane starts at the hand-tuned budget and may
                 only shrink (i/f upper-bounded at their init). Guarantees the
                 result costs no more than the hand model on any lane, and shows
@@ -229,7 +236,7 @@ def preset_config(preset: str, beta: float = 0.0, het_weights: bool = True,
             # except pmu at 12. act_layer is signed in the checkpoint despite
             # being a ReLU output, so k=1 there too.
             pmu_bits=(True, 9, 2),            # ap_fixed<12,10>, scale 2^-2
-            freeze_pmu=frozen, freeze_input=frozen,
+            freeze_pmu=frozen, freeze_input=frozen, freeze_all=frozen,
             input_bits=(True, 9, -4),         # ap_fixed<6,10>, scale 2^4
             post_agg_2to2_bits=(True, 1, 4),  # ap_fixed<6,2>,  scale 2^-4
             act_bits=(True, 2, 3),            # ap_fixed<6,3>,  scale 2^-3

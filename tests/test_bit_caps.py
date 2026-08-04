@@ -57,6 +57,18 @@ def test_bit_penalty_reaches_the_standalone_lanes(lane):
         'w6p12c', bit_penalty=1e-3))) == [1e-3, 1e-3]
 
 
+def test_frozen_preset_trains_weights_but_not_bits():
+    """w6p12f is the recipe-only control: no bitwidth search, but the network
+    itself must still train, or it measures nothing."""
+    model = build_model(qcfg=preset_config('w6p12f'))
+    bits = [v for v in model.trainable_variables
+            if v.path.endswith(('/i', '/f'))]
+    assert not bits, f'w6p12f left bitwidth variables trainable: {bits}'
+    assert any('kernel' in v.path for v in model.trainable_variables)
+    assert any('gamma' in v.path for v in model.trainable_variables)
+    assert {n: c['bits'] for n, c in contract_of(model).items()} == HAND_BITS
+
+
 def test_capped_run_only_ever_shrinks():
     # lr/lambda are cranked far above the training defaults so a few dozen
     # steps move the bit variables measurably; the point is direction, not
